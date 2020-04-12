@@ -7,7 +7,7 @@ void Communicator::AddListener(SocketSerial* lst)
 	WSAEVENT e = WSACreateEvent();
 	WSAEventSelect(lst->getRaw(), e, FD_ACCEPT);
 	events.push(e);
-	links.push(lst);
+	links.push(static_cast<Serial*>(lst));
 	buffers.push(nullptr);
 }
 
@@ -16,6 +16,16 @@ void Communicator::Push(void* ptr, ULONG ctx)
 	Context _ctx;
 	_ctx.ctx = ctx;
 	_ctx.packet = reinterpret_cast<Packet::TransmitionPacket*>(ptr);
+	waiting.push(_ctx);
+}
+
+void Communicator::PushNew(void* ptr, ULONG ctx)
+{
+	Context _ctx;
+	_ctx.ctx = ctx;
+	_ctx.packet = reinterpret_cast<Packet::TransmitionPacket*>(ptr);
+	_ctx.packet->length = htonl(_ctx.packet->length);
+	_ctx.packet->SubType = htons(_ctx.packet->SubType);
 	waiting.push(_ctx);
 }
 
@@ -64,7 +74,6 @@ void Communicator::Receive()
 				auto packet = reinterpret_cast<Packet::TransmitionPacket*>(new BYTE[buffer->length]+sizeof(short)+sizeof(long));
 				memcpy(packet + sizeof(long), packetBuffer.getBuffer(), buffer->length+ sizeof(short));
 				packet->length = htonl(buffer->length);
-				packet->SubType = subType;
 				Push(packet, 0);
 				buffer->length = -1;
 			}
@@ -81,13 +90,13 @@ void Communicator::Receive()
 
 void Communicator::Respond()
 {
+	register long counter = 0;
 	Context ctx;
 	Packet::TransmitionPacket* tpack;
 	while (run) {
 		if (!waiting.empty()) {
 			if (waiting.try_pop(ctx)) {
 				tpack = ctx.packet;
-				printf("%d\n", (int)tpack->SubType);
 				auto packet = reinterpret_cast<Packet::TPacket*>(tpack);
 				if (packet->to == myAddress)
 				{
@@ -122,9 +131,10 @@ void Communicator::Respond()
 				{
 					Serial* serial;
 					if (router.Query(packet->to, &serial)) {
-						if (!SendCompletely(serial, reinterpret_cast<char*>(packet), ntohl(packet->length))) {
+						int clen = ntohl(packet->length) + sizeof(long) + sizeof(short);
+						if (!SendCompletely(serial, reinterpret_cast<char*>(packet), clen)) {
 							if (ctx.ctx > 5)
-								Push(new Packet::ICMPPacket(myAddress, packet->from, 2), 0);
+								PushNew(new Packet::ICMPPacket(myAddress, packet->from, htonl(1)), 0);
 							else {
 								router.Detach(serial);
 								Push(tpack, ctx.ctx++);
@@ -133,7 +143,7 @@ void Communicator::Respond()
 						}
 					}
 					else {
-						Push(new Packet::ICMPPacket(myAddress, packet->from, 2), 0);
+						PushNew(new Packet::ICMPPacket(myAddress, packet->from, htonl(2)), 0);
 					}
 				}
 
@@ -142,7 +152,8 @@ void Communicator::Respond()
 					delete (BYTE*)tpack;
 			}
 		}
-		else {
+		else if (counter <= GetTickCount64()) {
+			counter = GetTickCount64() + 250;
 			auto dvec = router.GetRandomRoute();
 			lock.lock();
 			std::uniform_int_distribution<int> dis(0, links.size());
@@ -164,7 +175,7 @@ void Communicator::AddLink(SOCKET s, Address addr)
 	WSAEventSelect(s, e, FD_READ | FD_CLOSE);
 	events.push(e);
 	lock.lock();
-	auto serial = new SocketSerial(s);
+	Serial* serial = new SocketSerial(s);
 	links.push(serial);
 	buffers.push(new TemporaryBuffer);
 	atable[serial] = addr;
@@ -194,7 +205,7 @@ void Communicator::Release()
 			else {
 				Serial* serial;
 				if (router.Query(p->to, &serial)) {
-					if (!SendCompletely(serial, reinterpret_cast<char*>(ctx.packet), ctx.packet->length)) {
+					if (!SendCompletely(serial, reinterpret_cast<char*>(ctx.packet), ntohl(ctx.packet->length)+sizeof(long)+sizeof(short))) {
 						if (ctx.ctx > 5)
 							Push(new Packet::ICMPPacket(myAddress, p->from, 2), 0);
 						else {

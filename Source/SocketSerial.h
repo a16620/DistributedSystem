@@ -11,7 +11,7 @@ public:
 	SocketSerial(SOCKET s) : m_socket(s) {}
 	virtual ~SocketSerial() override;
 
-	SOCKET getRaw() const {
+	UINT_PTR getRaw() const override {
 		return m_socket;
 	}
 

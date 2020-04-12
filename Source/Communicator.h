@@ -26,7 +26,7 @@ class Communicator
 	};
 
 
-	SequentArrayList<SocketSerial*, linkCount> links;
+	SequentArrayList<Serial*, linkCount> links;
 	SequentArrayList<WSAEVENT, linkCount> events;
 	SequentArrayList<TemporaryBuffer*, linkCount> buffers;
 	concurrency::concurrent_queue<Context> waiting;
@@ -40,6 +40,7 @@ class Communicator
 
 	void AddListener(SocketSerial* lst);
 	void Push(void* ptr, ULONG ctx);
+	void PushNew(void* ptr, ULONG ctx);
 	void AddLink(SOCKET s, Address addr);
 	void DisconnectLink(int idx);
 
