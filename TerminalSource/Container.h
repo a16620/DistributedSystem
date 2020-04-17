@@ -156,11 +156,12 @@ class RecyclerBuffer {
 	BYTE buffer[N];
 	size_t start, end, used;
 public:
+	const size_t Length = N;
 	RecyclerBuffer() : start(0), end(0), used(0) {
 
 	}
 
-	auto push(const CBuffer& buf, int sz) {
+	auto push(const char* buf, int sz) {
 		if (used + sz > N)
 			throw std::runtime_error("RecyclerBuffer push: overflow");
 
@@ -168,24 +169,19 @@ public:
 			Arrange();
 		}
 
-		memcpy(buffer + end, buf.getBuffer(), sz);
+		memcpy(buffer + end, buf, sz);
 		end += sz;
 		used += sz;
 
 		return;// true;
 	}
 
-	auto push(const CBuffer& buf) {
-		push(buf, buf.length);
-		return;
-	}
-
-	auto poll(CBuffer& dst, size_t sz) {
+	auto poll(char* dst, size_t sz) {
 		if (used < sz) {
 			throw std::runtime_error("RecyclerBuffer push2param: overflow");
 		}
 
-		memcpy(dst.getBuffer(), buffer + start, sz);
+		memcpy(dst, buffer + start, sz);
 		start += sz;
 		used -= sz;
 

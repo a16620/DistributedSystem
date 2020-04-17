@@ -12,7 +12,6 @@ class Table;
 class Router
 {
 	std::unordered_map<Address, Table> routingTable;
-	int counter;
 public:
 	void Update(Address destination, Serial* port, size_t distance);
 	void Detach(Serial* port);
@@ -24,7 +23,7 @@ public:
 		Address address;
 		size_t distance;
 	};
-	dvec GetRandomRoute();
+	bool GetRandomRoute(dvec& vec);
 };
 
 class Table {
