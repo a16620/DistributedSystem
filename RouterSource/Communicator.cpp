@@ -66,10 +66,17 @@ void Communicator::Receive()
 				{
 					auto rp = reinterpret_cast<Packet::RoutingPacket*>(packet);
 					rLock.lock();
-					router.Update(rp->address, serial, ntohl(rp->hop));
+					router.Update(UUIDNtoH(rp->address), serial, ntohl(rp->hop));
 					rLock.unlock();
 					delete[] (BYTE*)packet;
 					break;
+				}
+				case Packet::PRT_TRANSMITION_ICMP:
+				{
+					auto icp = reinterpret_cast<Packet::ICMPPacket*>(packet);
+					rLock.lock();
+					router.RemoveAddress(UUIDNtoH(icp->from));
+					rLock.unlock();
 				}
 				default:
 				{
@@ -96,18 +103,15 @@ void Communicator::Respond()
 			if (waiting.try_pop(packet)) {
 				Serial* serial;
 				rLock.lock();
-				if (router.Query(packet->to, &serial)) {
+				if (router.Query(UUIDNtoH(packet->to), &serial)) {
 					int clen = ntohl(packet->length) + sizeof(Packet::PacketFrame);
-					for (int i = 0; i < clen; ++i)
-						printf("%d ", *((BYTE*)packet + i));
-					printf("\n\n");
 					if (!SendCompletely(serial, reinterpret_cast<char*>(packet), clen)) {
 						router.Detach(serial);
 						Push(packet);
 						packet = nullptr;
 					}
 				}
-				else {
+				else if (ntohs(packet->SubType) != Packet::PRT_TRANSMITION_ICMP) {
 					Push(Packet::Encode(Packet::Generate<Packet::ICMPPacket>(packet->to, packet->from, htonl(1))));
 				}
 				rLock.unlock();
@@ -125,7 +129,7 @@ void Communicator::Respond()
 			rLock.unlock();
 			if (!res)
 				continue;
-			auto rpk = Packet::Encode(Packet::Generate<Packet::RoutingPacket>(htonl(dvec.distance), dvec.address));
+			auto rpk = Packet::Encode(Packet::Generate<Packet::RoutingPacket>(htonl(dvec.distance+1), UUIDHtoN(dvec.address)));
 			sLock.lock();
 			for (int i = 1; i < links.size(); ++i) {
 				Serial* nb = links.at(i);

@@ -25,14 +25,16 @@ int main() {
 			char c = fgetc(stdin);
 			if (c == '\n')
 			{
-				buffer[i] = '\n';
-				buffer[i + 1] = 0;
+				buffer[i] = 0;
 				i = 0;
-				auto pp = InterpretPacket(buffer);
-				if (pp != nullptr)
-					com.input.push(reinterpret_cast<Packet::TransmitionPacket*>(Packet::Encode(pp)));
-				else
-					printf("exp\n");
+				if (strcmp(buffer, "") != 0)
+				{
+					auto pp = InterpretPacket(buffer);
+					if (pp != nullptr)
+						com.input.push(reinterpret_cast<Packet::TransmitionPacket*>(Packet::Encode(pp)));
+					else
+						printf("exp\n");
+				}
 				while (!com.output.empty())
 				{
 					Packet::TransmitionPacket* packet;
@@ -46,7 +48,8 @@ int main() {
 				buffer[i++] = c;
 			}
 		}
-		catch (...){
+		catch (std::exception e){
+			fprintf(stdout, "err: %s\n", e.what());
 			com.Stop();
 			break;
 		}
@@ -64,15 +67,25 @@ string DescriptPacket(Packet::TransmitionPacket* packet)
 	switch (ntohs(packet->SubType)) {
 	case Packet::PRT_TRANSMITION_DATA:
 	{
-		for (int i = 0; i < packet->length + sizeof(Packet::PacketFrame); i++)
-			printf("%d ", *((char*)packet + i));
-		printf("\n");
-		sprintf(result, "DATA from: %d data: %s", packet->from, ((char*)packet + sizeof(Packet::TransmitionPacket)));
+		char* addr;
+		UUID uad = UUIDNtoH(packet->from);
+		UuidToStringA(&uad, (RPC_CSTR*)&addr);
+		sprintf(result, "DATA from: %s data: %s", addr, ((char*)packet + sizeof(Packet::TransmitionPacket)));
 		break;
 	}
 	case Packet::PRT_TRANSMITION_ICMP:
 	{
-		sprintf(result, "Message wasn't sent to: %d", packet->from);
+		char* addr;
+		UUID uad = UUIDNtoH(packet->from);
+		UuidToStringA(&uad, (RPC_CSTR*)&addr);
+		UuidToStringA(&uad, (RPC_CSTR*)&addr);
+		sprintf(result, "Message wasn't sent to: %s", addr);
+		break;
+	}
+	case Packet::PRT_INNER_FETCH_ADDR:
+	{
+		fwrite((char*)packet + sizeof(Packet::PacketFrame), 1, packet->length, stdout);
+		strcpy(result, "fetch");
 		break;
 	}
 	}
@@ -82,18 +95,30 @@ string DescriptPacket(Packet::TransmitionPacket* packet)
 //To Communicator
 Packet::TransmitionPacket* InterpretPacket(string command)
 {
+	auto params = Split(command, ' ');
 	
-	if (true) {
-		if (true) {
-			auto packet = reinterpret_cast<Packet::DataPacket*>(new BYTE[sizeof(Packet::DataPacket)+4]);
-			memcpy((BYTE*)packet + sizeof(Packet::DataPacket), "AAAA", 4);
-			packet->SubType = Packet::PRT_TRANSMITION_DATA;
-			packet->length = 4+sizeof(Packet::TransmitionPacket)-sizeof(Packet::PacketFrame);
-			packet->from = 1;
-			packet->to = 1;
+	if (params[0].compare("DATA") == 0) {
+		if (params.size() >= 3) {
+			UUID dst;
+			if (UuidFromStringA((RPC_CSTR)(params[1].c_str()), &dst) == RPC_S_OK)
+			{
+				auto packet = reinterpret_cast<Packet::DataPacket*>(new BYTE[sizeof(Packet::DataPacket) + params[2].size()+1]);
+				memcpy((BYTE*)packet + sizeof(Packet::DataPacket), params[2].c_str(), params[2].size() + 1);
+				packet->SubType = Packet::PRT_TRANSMITION_DATA;
+				packet->length = params[2].size() + 1 + sizeof(Packet::TransmitionPacket) - sizeof(Packet::PacketFrame);
+				packet->to = UUIDHtoN(dst);
 
-			return packet;
+				return packet;
+			}
 		}
+	}
+	else if (params[0].compare("ADDR") == 0) {
+		auto p =reinterpret_cast<Packet::PacketFrame*>(new BYTE[sizeof(Packet::PacketFrame)]);
+		p->SubType = Packet::PRT_INNER_FETCH_ADDR;
+		return reinterpret_cast<Packet::TransmitionPacket*>(p);
+	}
+	else if (params[0].compare("quit") == 0) {
+		throw std::exception("quit was entered");
 	}
 
 	return nullptr;
@@ -102,22 +127,25 @@ Packet::TransmitionPacket* InterpretPacket(string command)
 std::vector<string> Split(const string& origin, char d) {
 	std::vector<string> list;
 
-	char buffer[100];
 	int offset = 0;
 	bool slicing = false;
 	for (int i = 0; i < origin.length(); ++i) {
 		if (!slicing && origin[i] != d) {
 			slicing = true;
+			offset = i;
 			i--;
 			continue;
 		}
-		if (slicing && (origin[i] == d || origin[i] == '\0')) {
+		if (slicing && origin[i] == d) {
 			size_t pLen = i - offset;
 			
 			list.push_back(origin.substr(offset, pLen));
-			offset = i + 1;
 			slicing = false;
 		}
+	}
+
+	if (slicing) {
+		list.push_back(origin.substr(offset, origin.length()-offset));
 	}
 	return list;
 }

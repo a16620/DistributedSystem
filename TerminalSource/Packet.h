@@ -6,7 +6,8 @@ namespace Packet {
 	enum {
 		PRT_INTER_ROUTING,
 		PRT_TRANSMITION_DATA,
-		PRT_TRANSMITION_ICMP
+		PRT_TRANSMITION_ICMP,
+		PRT_INNER_FETCH_ADDR
 	};
 
 	struct PacketFrame {

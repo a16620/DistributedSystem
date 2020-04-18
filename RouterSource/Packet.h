@@ -37,7 +37,7 @@ namespace Packet {
 
 	struct ICMPPacket : TransmitionPacket {
 		ULONG flag;
-		ICMPPacket(Address from, Address to, ULONG flag) : TransmitionPacket(sizeof(ULONG), PRT_TRANSMITION_ICMP, from, to), flag(flag) {}
+		ICMPPacket(Address from, Address to, ULONG flag) : TransmitionPacket(sizeof(ULONG)+2*sizeof(Address), PRT_TRANSMITION_ICMP, from, to), flag(flag) {}
 	};
 
 	PacketFrame* Encode(PacketFrame* packet);

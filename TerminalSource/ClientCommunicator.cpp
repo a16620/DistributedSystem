@@ -1,8 +1,9 @@
 #include "ClientCommunicator.h"
 #include "Container.h"
-
+#pragma warning(disable: 4996)
 void ClientCommunicator::Start(ULONG addr)
 {
+	UuidCreate(&myAddress);
 	link = new SocketSerial(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
 	sockaddr_in sa;
 	sa.sin_family = AF_INET;
@@ -54,6 +55,9 @@ void ClientCommunicator::Task()
 			goto endRecv;
 
 		if (networkEvents.lNetworkEvents & FD_READ) {
+			u_long hasCount;
+			ioctlsocket(link->getRaw(), FIONREAD, &hasCount);
+			if (buffer.Length - buffer.Used() >= hasCount) {
 			int readbytes = link->Read(tBuffer, 128);
 			buffer.push(tBuffer, readbytes);
 			if (length == 0 && buffer.Used() >= sizeof(u_long)) {
@@ -61,19 +65,24 @@ void ClientCommunicator::Task()
 				length = ntohl(*reinterpret_cast<u_long*>(tBuffer));
 			}
 
-			if (length != 0 && buffer.Used() >= (length + sizeof(Packet::PacketFrame)-sizeof(u_long))) {
-				auto packetBuffer = new BYTE[length+sizeof(Packet::PacketFrame)];
-				buffer.poll(reinterpret_cast<char*>(packetBuffer+sizeof(u_long)), length + sizeof(Packet::PacketFrame)-sizeof(u_long));
+			if (length != 0 && buffer.Used() >= (length + sizeof(Packet::PacketFrame) - sizeof(u_long))) {
+				auto packetBuffer = new BYTE[length + sizeof(Packet::PacketFrame)];
+				buffer.poll(reinterpret_cast<char*>(packetBuffer + sizeof(u_long)), length + sizeof(Packet::PacketFrame) - sizeof(u_long));
 				auto pp = reinterpret_cast<Packet::PacketFrame*>(packetBuffer);
 				pp->length = length;
 
 				switch (ntohs(pp->SubType)) {
 				case Packet::PRT_INTER_ROUTING:
 				{
-					printf("ROUTING %d\n", reinterpret_cast<Packet::RoutingPacket*>(pp)->address);
-					addressTable[reinterpret_cast<Packet::RoutingPacket*>(pp)->address] = ntohl(reinterpret_cast<Packet::RoutingPacket*>(pp)->hop);
+					addressTable[UUIDNtoH(reinterpret_cast<Packet::RoutingPacket*>(pp)->address)] = ntohl(reinterpret_cast<Packet::RoutingPacket*>(pp)->hop);
 					delete[] packetBuffer;
 					break;
+				}
+				case Packet::PRT_TRANSMITION_ICMP:
+				{
+					auto ddd = reinterpret_cast<Packet::ICMPPacket*>(pp)->from;
+					auto dd = UUIDNtoH(reinterpret_cast<Packet::ICMPPacket*>(pp)->from);
+					addressTable.erase(dd);
 				}
 				default:
 				{
@@ -81,6 +90,7 @@ void ClientCommunicator::Task()
 				}
 				}
 				length = 0;
+			}
 			}
 		}
 
@@ -93,8 +103,32 @@ void ClientCommunicator::Task()
 		if (!input.empty()) {
 			TransmitionPacket* packet;
 			if (input.try_pop(packet)) {
-				if (!SendCompletely(link, reinterpret_cast<char*>(packet), sizeof(Packet::PacketFrame)+ntohl(packet->length))) {
-					run = false;
+				if (ntohs(packet->SubType) == Packet::PRT_INNER_FETCH_ADDR)
+				{
+					std::string address;
+					char tb[40];
+					for (auto ad : addressTable) {
+						char* add;
+						UuidToStringA(&ad.first, (RPC_CSTR*)&add);
+						address.append(add);
+						if (ad.first == myAddress)
+							sprintf(tb, " Loopback\n");
+						else
+							sprintf(tb, " hop: %d\n", ad.second);
+						address.append(tb);
+					}
+					auto opack = new BYTE[sizeof(Packet::PacketFrame) + address.size()+1];
+					Packet::PacketFrame frame(address.size(), htons(Packet::PRT_INNER_FETCH_ADDR));
+					memcpy(opack, &frame, sizeof(Packet::PacketFrame));
+					memcpy(opack + sizeof(Packet::PacketFrame), address.c_str(), address.size());
+					opack[sizeof(Packet::PacketFrame) + address.size()] = 0;
+					output.push(reinterpret_cast<Packet::TransmitionPacket*>(opack));
+				}
+				else {
+					packet->from = UUIDHtoN(myAddress);
+					if (!SendCompletely(link, reinterpret_cast<char*>(packet), sizeof(Packet::PacketFrame) + ntohl(packet->length))) {
+						run = false;
+					}
 				}
 				delete packet;
 			}
@@ -102,7 +136,7 @@ void ClientCommunicator::Task()
 
 		if (counter < GetTickCount64()) {
 			counter = GetTickCount64() + 5000;
-			auto prp = Packet::Encode( Packet::Generate<Packet::RoutingPacket>(htonl(0), 1));
+			auto prp = Packet::Encode( Packet::Generate<Packet::RoutingPacket>(htonl(0), UUIDHtoN(myAddress)));
 			if (!SendCompletely(link, (char*)prp, sizeof(Packet::RoutingPacket))) {
 				run = false;
 			}
