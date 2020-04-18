@@ -1,0 +1,3 @@
+ADDR - get addresses from cache. cache will collected from router.
+DATA [Destination] [DATA] - send data to the destination.
+quit - stop the terminal.
