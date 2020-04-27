@@ -17,7 +17,20 @@ int main() {
 	WSADATA wsa;
 	WSAStartup(MAKEWORD(2, 2), &wsa);
 	ClientCommunicator com;
-	com.Start(INADDR_LOOPBACK);
+	ULONG target = INADDR_LOOPBACK;
+	std::string cmd;
+	u_short port;
+	std::cout << "> ";
+	std::cin >> port >> cmd;
+	if (cmd == "nonaddr") {
+		std::cout << "start without connection...";
+	}
+	else if (cmd == "loopback" || cmd == "localhost")
+		target = INADDR_LOOPBACK;
+	else
+		target = inet_addr(cmd.c_str());
+	com.Start(target, port);
+	std::cout << "...started" << std::endl;
 	thread cTh([&] { com.Task(); });
 
 	while (com.run) {

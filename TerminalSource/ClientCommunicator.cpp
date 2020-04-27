@@ -1,13 +1,13 @@
 #include "ClientCommunicator.h"
 #include "Container.h"
 #pragma warning(disable: 4996)
-void ClientCommunicator::Start(ULONG addr)
+void ClientCommunicator::Start(ULONG addr, u_short port)
 {
 	UuidCreate(&myAddress);
 	link = new SocketSerial(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
 	sockaddr_in sa;
 	sa.sin_family = AF_INET;
-	sa.sin_port = htons(7777);
+	sa.sin_port = htons(port);
 	sa.sin_addr.s_addr = htonl(addr);
 	while (connect(link->getRaw(), (sockaddr*)&sa, sizeof(sa)) == -1);
 	levent = WSACreateEvent();

@@ -2,16 +2,16 @@
 #include "Packet.h"
 #include <random>
 
-void Router::Update(Address destination, Serial* port, size_t distance)
+void Router::Update(const Address& destination, Serial* port, size_t distance)
 {
 	auto table = routingTable.find(destination);
 	if (table == routingTable.end()) {
 		auto tmp = routingTable.insert(std::make_pair(destination, Table(4)));
 		tmp.first->second.Insert(port, distance);
+		it = tmp.first;
 	}
 	else
 		table->second.Insert(port, distance);
-	
 }
 
 void Router::Detach(Serial* port)
@@ -26,12 +26,12 @@ void Router::Detach(Serial* port)
 	}
 }
 
-void Router::RemoveAddress(Address address)
+void Router::RemoveAddress(const Address& address)
 {
 	routingTable.erase(address);
 }
 
-bool Router::Query(Address destination, Serial** out)
+bool Router::Query(const Address& destination, Serial** out)
 {
 	auto it = routingTable.find(destination);
 	if (it != routingTable.end()) {
@@ -44,19 +44,27 @@ bool Router::Query(Address destination, Serial** out)
 	return false;
 }
 
+bool Router::IsSuper(const Address& destination, Serial* port)
+{
+	//TODO
+	return false;
+}
+
+Router::Router()
+{
+	it = routingTable.end();
+}
+
 bool Router::GetRandomRoute(Router::dvec& vec)
 {
 	if (routingTable.size() == 0)
 		return false;
-	std::uniform_int_distribution<int> dis(0, routingTable.size()-1);
+	
+	if (it == routingTable.end())
+		it = routingTable.begin();
 
-	auto counter = dis(gen);
-	auto it = routingTable.begin();
-	for (; counter > 0; counter--)
-	{
-		++it;
-	}
 	vec = dvec{ it->first, it->second.dist() };
+	++it;
 	return true;
 }
 
@@ -70,12 +78,12 @@ void Table::Insert(Serial* port, size_t distance)
 	else {
 		if (it->second == distance)
 			return;
-		table.find(it->second)->second.erase(port);
-		rtable.erase(port);
+		Remove(port);
 
-		it->second = distance;
+		rtable.insert(std::make_pair(port, distance));
+
 		auto n = table.find(distance);
-		if (n != table.end()) {
+		if (n == table.end()) {
 			table.insert(std::make_pair(distance, std::unordered_set<Serial*>({ port })));
 		}
 		else {
@@ -92,8 +100,12 @@ void Table::Remove(Serial* port)
 {
 	auto it = rtable.find(port);
 	if (it != rtable.end()) {
-		table.find(it->second)->second.erase(port);
+		auto at = table.find(it->second);
+		at->second.erase(port);
 		rtable.erase(it);
+		if (at->second.empty()) {
+			table.erase(at);
+		}
 	}
 }
 

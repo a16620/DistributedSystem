@@ -18,7 +18,7 @@ public:
 	std::atomic_bool run;
 	concurrency::concurrent_queue<Packet::TransmitionPacket*> input, output;
 
-	void Start(ULONG addr);
+	void Start(ULONG addr, u_short port);
 	void Stop();
 	void Release();
 	void Task();

@@ -133,7 +133,11 @@ void Communicator::Respond()
 			sLock.lock();
 			for (int i = 1; i < links.size(); ++i) {
 				Serial* nb = links.at(i);
-				SendCompletely(nb, reinterpret_cast<char*>(rpk), sizeof(Packet::RoutingPacket));
+				rLock.lock();
+				auto iss = router.IsSuper(dvec.address, nb);
+				rLock.unlock();
+				if (!iss)
+					SendCompletely(nb, reinterpret_cast<char*>(rpk), sizeof(Packet::RoutingPacket));
 			}
 			sLock.unlock();
 			delete[] (BYTE*)rpk;
@@ -188,13 +192,13 @@ void Communicator::Release()
 	}
 }
 
-void Communicator::Start(ULONG tnode)
+void Communicator::Start(ULONG tnode, u_short targetport, u_short port)
 {
 	auto listener = new SocketSerial(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
 	sockaddr_in server;
 	server.sin_addr.s_addr = htonl(INADDR_ANY);
 	server.sin_family = AF_INET;
-	server.sin_port = htons(7777);
+	server.sin_port = htons(port);
 	bind(listener->getRaw(), reinterpret_cast<sockaddr*>(&server), sizeof(sockaddr_in));
 	listen(listener->getRaw(), 5);
 
@@ -205,7 +209,7 @@ void Communicator::Start(ULONG tnode)
 		return;
 	sockaddr_in tar;
 	tar.sin_family = AF_INET;
-	tar.sin_port = htons(7777);
+	tar.sin_port = htons(targetport);
 	tar.sin_addr.s_addr = htonl(tnode);
 	SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	while (connect(s, reinterpret_cast<sockaddr*>(&tar), sizeof(sockaddr_in)) != 0);

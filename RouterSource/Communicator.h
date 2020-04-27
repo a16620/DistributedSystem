@@ -34,7 +34,7 @@ class Communicator
 	void DisconnectLink(int idx);
 
 public:
-	void Start(ULONG tnode);
+	void Start(ULONG tnode, u_short targetport, u_short port);
 	void Release();
 
 	void Receive();

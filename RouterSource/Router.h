@@ -12,12 +12,15 @@ class Table;
 class Router
 {
 	std::unordered_map<Address, Table> routingTable;
+	std::unordered_map<Address, Table>::iterator it;
 public:
-	void Update(Address destination, Serial* port, size_t distance);
+	void Update(const Address& destination, Serial* port, size_t distance);
 	void Detach(Serial* port);
-	void RemoveAddress(Address address);
-	bool Query(Address destination, Serial** out);
+	void RemoveAddress(const Address& address);
+	bool Query(const Address& destination, Serial** out);
+	bool IsSuper(const Address& destination, Serial* port);
 
+	Router();
 public:
 	struct dvec {
 		Address address;
